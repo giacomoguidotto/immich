@@ -1,0 +1,99 @@
+# WARNING: To install Immich, follow our guide: https://immich.app/docs/install/docker-compose
+#
+# Make sure to use the docker-compose.yml of the current release:
+#
+# https://github.com/immich-app/immich/releases/latest/download/docker-compose.yml
+#
+# The compose file on main may not be compatible with the latest release.
+
+name: immich
+
+services:
+    tailscale:
+        image: tailscale/tailscale:latest
+        container_name: tailscale
+        hostname: nicagi-store01
+        environment:
+            # client id: kqNu37RfXB11CNTRL (generated from tailscale admin console)
+            - TS_AUTHKEY = REDACTED
+            # - TS_EXTRA_ARGS = --advertise-tags=tag:container --reset --advertise-exit-node # optional: if you want this NAS to be an exit node
+            - TS_HOSTNAME = nicagi-store01 # sets the hostname in the Tailscale admin console
+            - TS_STATE_DIR = /var/lib/tailscale # ensures state is written to the mounted volume
+            # TS_SERVE_CONFIG: /config/serve-config.json # warning: first find the proxy url with `docker exec -it tailscale tailscale serve status`
+            - TS_USERSPACE = false # using kernel mode, set to "true" for userspace mode if kernel mode fails.
+        volumes:
+            - /share/CACHEDEV3_DATA/immich/config:/config
+            - /share/CACHEDEV3_DATA/immich/tailscale:/var/lib/tailscale # stores tailscale's state, to persist it across container restarts/recreations.
+        network_mode: host
+        devices:
+            - /dev/net/tun:/dev/net/tun # required for TUN device
+        cap_add:
+            - net_admin # required for Tailscale to modify network interfaces
+            # - sys_module # required for Tailscale to modify kernel modules
+        restart: unless-stopped
+
+    immich-server:
+        container_name: immich_server
+        image: ghcr.io/immich-app/immich-server:release
+        # extends:
+        #   file: hwaccel.transcoding.yml
+        #   service: cpu # set to one of [nvenc, quicksync, rkmpp, vaapi, vaapi-wsl] for accelerated transcoding
+        volumes:
+            - /share/CACHEDEV3_DATA/immich/upload:/usr/src/app/upload
+            - /share/CACHEDEV3_DATA/media:/media
+            - /etc/localtime:/etc/localtime:ro
+        environment:
+            DB_USERNAME: postgres
+            DB_PASSWORD: "REDACTED"
+            DB_DATABASE_NAME: immich
+            TZ: Europe/Rome
+        # network_mode: service:tailscale
+        ports:
+          - '2283:2283' # optional: if you want to expose the port to the internet
+        depends_on:
+            - redis
+            - database
+        restart: always
+        healthcheck:
+            disable: false
+
+    immich-machine-learning:
+        container_name: immich_machine_learning
+        # For hardware acceleration, add one of -[armnn, cuda, rocm, openvino, rknn] to the image tag.
+        # Example tag: ${IMMICH_VERSION:-release}-cuda
+        image: ghcr.io/immich-app/immich-machine-learning:release
+        # extends: # uncomment this section for hardware acceleration - see https://immich.app/docs/features/ml-hardware-acceleration
+        #   file: hwaccel.ml.yml
+        #   service: cpu # set to one of [armnn, cuda, rocm, openvino, openvino-wsl, rknn] for accelerated inference - use the `-wsl` version for WSL2 where applicable
+        volumes:
+            - model-cache:/cache
+        environment:
+            - TZ=Europe/Rome
+        restart: always
+        healthcheck:
+            disable: false
+
+    redis:
+        container_name: immich_redis
+        image: docker.io/valkey/valkey:8-bookworm@sha256:42cba146593a5ea9a622002c1b7cba5da7be248650cbb64ecb9c6c33d29794b1
+        healthcheck:
+            test: redis-cli ping || exit 1
+        restart: always
+
+    database:
+        container_name: immich_postgres
+        image: ghcr.io/immich-app/postgres:14-vectorchord0.3.0-pgvectors0.2.0
+        environment:
+            POSTGRES_PASSWORD: "REDACTED"
+            POSTGRES_USER: postgres
+            POSTGRES_DB: immich
+            POSTGRES_INITDB_ARGS: '--data-checksums'
+            TZ: Europe/Rome
+            # Uncomment the DB_STORAGE_TYPE: 'HDD' var if your database isn't stored on SSDs
+            # DB_STORAGE_TYPE: 'HDD'
+        volumes:
+            - /share/CACHEDEV3_DATA/immich/db:/var/lib/postgresql/data
+        restart: always
+
+volumes:
+    model-cache:
