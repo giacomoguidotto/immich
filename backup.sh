@@ -1,8 +1,10 @@
 #!/bin/bash
 
 # Immich Backup Script for QNAP NAS
-# Version 1.1
-# Date: 2025-05-23
+# Version 1.2
+# Date: 2025-05-28
+
+# TODO: backup the media folder
 
 # --- Configuration ---
 # Immich Upload Location on the NAS (Host Path)
@@ -27,6 +29,21 @@ DB_CONTAINER_NAME="immich_postgres"
 DB_USER="postgres"
 DB_PASSWORD="REDACTED"
 
+# Parse command line arguments
+SKIP_DUMP=false
+while [[ $# -gt 0 ]]; do
+    case $1 in
+        --skip-dump)
+            SKIP_DUMP=true
+            shift
+            ;;
+        *)
+            echo "Unknown option: $1"
+            echo "Usage: $0 [--skip-dump]"
+            exit 1
+            ;;
+    esac
+done
 
 # --- Script Logic ---
 log_prefix() { echo "[$(date '+%Y%m%d %H:%M:%S.%3N')] -"; }
@@ -55,17 +72,21 @@ mkdir -p "${DB_BACKUP_DIR}"
 mkdir -p "${UPLOAD_BACKUP_DIR}"
 echo "$(log_prefix) Backup directories checked/created."
 
-# Database backup
-DB_BACKUP_FILE="${DB_BACKUP_DIR}/immich-db-$(date '+%Y%m%d%H%M%S').sql.gz"
-echo "$(log_prefix) Starting database backup for container '${DB_CONTAINER_NAME}'..."
-echo "$(log_prefix) Dumping to ${DB_BACKUP_FILE}..."
+# Database backup (skip if --skip-dump flag is set)
+if [ "$SKIP_DUMP" = false ]; then
+    DB_BACKUP_FILE="${DB_BACKUP_DIR}/immich-db-$(date '+%Y%m%d%H%M%S').sql.gz"
+    echo "$(log_prefix) Starting database backup for container '${DB_CONTAINER_NAME}'..."
+    echo "$(log_prefix) Dumping to ${DB_BACKUP_FILE}..."
 
-if PGPASSWORD="${DB_PASSWORD}" docker exec -t "${DB_CONTAINER_NAME}" pg_dumpall --clean --if-exists --username="${DB_USER}" | gzip > "${DB_BACKUP_FILE}"; then
-    echo "$(log_prefix) Database backup completed successfully."
+    if PGPASSWORD="${DB_PASSWORD}" docker exec -t "${DB_CONTAINER_NAME}" pg_dumpall --clean --if-exists --username="${DB_USER}" | gzip > "${DB_BACKUP_FILE}"; then
+        echo "$(log_prefix) Database backup completed successfully."
+    else
+        echo "$(log_prefix) ERROR: Database backup failed."
+        rm -f "${DB_BACKUP_FILE}"
+        exit 1
+    fi
 else
-    echo "$(log_prefix) ERROR: Database backup failed."
-    rm -f "${DB_BACKUP_FILE}"
-    exit 1
+    echo "$(log_prefix) Skipping database backup as requested."
 fi
 
 # Assets backup
