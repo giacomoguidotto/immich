@@ -1,10 +1,10 @@
-# WARNING: To install Immich, follow our guide: https://immich.app/docs/install/docker-compose
+# immich compose file
+# 2025-07-31 v0.3
 #
-# Make sure to use the docker-compose.yml of the current release:
-#
-# https://github.com/immich-app/immich/releases/latest/download/docker-compose.yml
-#
-# The compose file on main may not be compatible with the latest release.
+# useful links:
+# - immich installation guide: https://immich.app/docs/install/docker-compose
+# - immich docker-compose file: https://github.com/immich-app/immich/releases/latest/download/docker-compose.yml
+# - tailscale docker-compose file: https://github.com/tailscale-dev/docker-guide-code-examples/blob/main/01-authkey/compose.yaml
 
 name: immich
 
@@ -14,42 +14,50 @@ services:
         container_name: tailscale
         hostname: immich
         environment:
+            # generated key from tailscale dashboard, avoid login procedure
             - TS_AUTHKEY=${TS_AUTHKEY}
-            # - TS_EXTRA_ARGS=--advertise-tags=tag:container --reset --advertise-exit-node # optional: if you want this NAS to be an exit node
-            # - TS_HOSTNAME = nicagi-store01 # sets the hostname in the Tailscale admin console
-            - TS_STATE_DIR=/var/lib/tailscale # ensures state is written to the mounted volume
-            - TS_SERVE_CONFIG=/config/serve-config.json # warning: first find the proxy url with `docker exec -it tailscale tailscale serve status`
-            - TS_USERSPACE=false # using kernel mode, set to "true" for userspace mode if kernel mode fails.
+            # optional: if you want this NAS to be an exit node
+            # - TS_EXTRA_ARGS=--advertise-tags=tag:container --reset --advertise-exit-node
+            # ensures state is persisted to the mounted volume
+            - TS_STATE_DIR=/var/lib/tailscale
+            # note: find the domain exposed from ts serve with
+            # `docker exec -it tailscale tailscale serve status`
+            - TS_SERVE_CONFIG=/config/serve-config.json
+             # using kernel mode, set to "true" for userspace mode if kernel mode fails.
+            - TS_USERSPACE=false
         volumes:
-            - ${PWD}/ts-config:/config # stores tailscale's config for https connections
-            - ${PWD}/ts-state:/var/lib/tailscale # stores tailscale's state, to persist it across container restarts/recreations.
-        # network_mode: host
+            # stores tailscale's config for https connections
+            - ${PWD}/ts-config:/config 
+            # stores tailscale's state, to persist it across container restarts/recreations.
+            - ${PWD}/ts-state:/var/lib/tailscale 
         devices:
-            - /dev/net/tun:/dev/net/tun # required for TUN device
+            # required for TUN device
+            - /dev/net/tun:/dev/net/tun 
         cap_add:
-            - net_admin # required for Tailscale to modify network interfaces
-            # - sys_module # required for Tailscale to modify kernel modules
+            # required for ts to modify network interfaces
+            - net_admin 
+            # required for ts to modify kernel modules
+            # - sys_module 
         restart: unless-stopped
 
     immich-server:
         container_name: immich_server
-        image: ghcr.io/immich-app/immich-server:release
+        image: ghcr.io/immich-app/immich-server:${IMMICH_VERSION:-release}
         # extends:
         #   file: hwaccel.transcoding.yml
         #   service: cpu # set to one of [nvenc, quicksync, rkmpp, vaapi, vaapi-wsl] for accelerated transcoding
         volumes:
-            - /share/CACHEDEV3_DATA/immich/upload:/usr/src/app/upload
-            - /share/CACHEDEV3_DATA/media:/media
+            - ${UPLOAD_LOCATION}:/usr/src/app/upload
+            - ${X_MEDIA_LIB}:/media
             - /etc/localtime:/etc/localtime:ro
-        environment:
-            DB_USERNAME: postgres
-            DB_PASSWORD: "REDACTED"
-            DB_DATABASE_NAME: immich
-            TZ: Europe/Rome
-        network_mode: service:tailscale
+        env_file:
+            - .env
+
         # using tailnet instead of port forwarding
         # ports:
         #   - '2283:2283'
+        network_mode: service:tailscale
+
         depends_on:
             - redis
             - database
@@ -61,14 +69,14 @@ services:
         container_name: immich_machine_learning
         # For hardware acceleration, add one of -[armnn, cuda, rocm, openvino, rknn] to the image tag.
         # Example tag: ${IMMICH_VERSION:-release}-cuda
-        image: ghcr.io/immich-app/immich-machine-learning:release
+        image: ghcr.io/immich-app/immich-machine-learning:${IMMICH_VERSION:-release}
         # extends: # uncomment this section for hardware acceleration - see https://immich.app/docs/features/ml-hardware-acceleration
         #   file: hwaccel.ml.yml
         #   service: cpu # set to one of [armnn, cuda, rocm, openvino, openvino-wsl, rknn] for accelerated inference - use the `-wsl` version for WSL2 where applicable
         volumes:
             - model-cache:/cache
-        environment:
-            - TZ=Europe/Rome
+        env_file:
+            - .env
         restart: always
         healthcheck:
             disable: false
@@ -84,17 +92,15 @@ services:
         container_name: immich_postgres
         image: ghcr.io/immich-app/postgres:14-vectorchord0.3.0-pgvectors0.2.0
         environment:
-            POSTGRES_PASSWORD: "REDACTED"
-            POSTGRES_USER: postgres
-            POSTGRES_DB: immich
-            POSTGRES_INITDB_ARGS: '--data-checksums'
-            TZ: Europe/Rome
+            - POSTGRES_PASSWORD=${DB_PASSWORD}
+            - POSTGRES_USER=${DB_USERNAME}
+            - POSTGRES_DB=${DB_DATABASE_NAME}
+            - POSTGRES_INITDB_ARGS=--data-checksums
             # Uncomment the DB_STORAGE_TYPE: 'HDD' var if your database isn't stored on SSDs
             # DB_STORAGE_TYPE: 'HDD'
         volumes:
-            - /share/CACHEDEV3_DATA/immich/db:/var/lib/postgresql/data
+            - ${DB_DATA_LOCATION}:/var/lib/postgresql/data
         restart: always
 
 volumes:
     model-cache:
-    tailscale-data:

@@ -91,12 +91,12 @@
       "concurrency": 3
     },
     "videoConversion": {
-      "concurrency": 1
+      "concurrency": 2
     }
   },
   "library": {
     "scan": {
-      "cronExpression": "0 */6 * * *",
+      "cronExpression": "0 2 * * *",
       "enabled": true
     },
     "watch": {
@@ -141,6 +141,14 @@
   "newVersionCheck": {
     "enabled": true
   },
+  "nightlyTasks": {
+    "clusterNewFaces": true,
+    "databaseCleanup": true,
+    "generateMemories": true,
+    "missingThumbnails": true,
+    "startTime": "00:00",
+    "syncQuotaUsage": true
+  },
   "notifications": {
     "smtp": {
       "enabled": false,
@@ -161,16 +169,19 @@
     "buttonText": "Login with OAuth",
     "clientId": "",
     "clientSecret": "",
-    "defaultStorageQuota": 0,
+    "defaultStorageQuota": null,
     "enabled": false,
     "issuerUrl": "",
     "mobileOverrideEnabled": false,
     "mobileRedirectUri": "",
     "profileSigningAlgorithm": "none",
+    "roleClaim": "immich_role",
     "scope": "openid email profile",
     "signingAlgorithm": "RS256",
     "storageLabelClaim": "preferred_username",
-    "storageQuotaClaim": "immich_quota"
+    "storageQuotaClaim": "immich_quota",
+    "timeout": 30000,
+    "tokenEndpointAuthMethod": "client_secret_post"
   },
   "passwordLogin": {
     "enabled": true
@@ -180,7 +191,7 @@
   },
   "server": {
     "externalDomain": "",
-    "loginPageMessage": "sup",
+    "loginPageMessage": "",
     "publicUsers": true
   },
   "storageTemplate": {
