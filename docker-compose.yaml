@@ -12,19 +12,17 @@ services:
     tailscale:
         image: tailscale/tailscale:latest
         container_name: tailscale
-        hostname: nicagi-store01
+        hostname: immich
         environment:
-            # client id: kqNu37RfXB11CNTRL (generated from tailscale admin console)
-            - TS_AUTHKEY = REDACTED
-            # - TS_EXTRA_ARGS = --advertise-tags=tag:container --reset --advertise-exit-node # optional: if you want this NAS to be an exit node
-            - TS_HOSTNAME = nicagi-store01 # sets the hostname in the Tailscale admin console
-            - TS_STATE_DIR = /var/lib/tailscale # ensures state is written to the mounted volume
-            - TS_SERVE_CONFIG = /config/serve-config.json # warning: first find the proxy url with `docker exec -it tailscale tailscale serve status`
-            - TS_USERSPACE = false # using kernel mode, set to "true" for userspace mode if kernel mode fails.
+            - TS_AUTHKEY=${TS_AUTHKEY}
+            # - TS_EXTRA_ARGS=--advertise-tags=tag:container --reset --advertise-exit-node # optional: if you want this NAS to be an exit node
+            # - TS_HOSTNAME = nicagi-store01 # sets the hostname in the Tailscale admin console
+            - TS_STATE_DIR=/var/lib/tailscale # ensures state is written to the mounted volume
+            # - TS_SERVE_CONFIG=/config/serve-config.json # warning: first find the proxy url with `docker exec -it tailscale tailscale serve status`
+            - TS_USERSPACE=false # using kernel mode, set to "true" for userspace mode if kernel mode fails.
         volumes:
-            - /share/CACHEDEV3_DATA/immich/config:/config
-            - tailscale-data:/var/lib/tailscale # stores tailscale's state, to persist it across container restarts/recreations.
-        network_mode: host
+            - ${PWD}/ts-state:/var/lib/tailscale # stores tailscale's state, to persist it across container restarts/recreations.
+        # network_mode: host
         devices:
             - /dev/net/tun:/dev/net/tun # required for TUN device
         cap_add:
@@ -47,7 +45,7 @@ services:
             DB_PASSWORD: "REDACTED"
             DB_DATABASE_NAME: immich
             TZ: Europe/Rome
-        # network_mode: service:tailscale
+        network_mode: service:tailscale
         ports:
           - '2283:2283' # optional: if you want to expose the port to the internet
         depends_on:
