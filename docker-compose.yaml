@@ -18,9 +18,10 @@ services:
             # - TS_EXTRA_ARGS=--advertise-tags=tag:container --reset --advertise-exit-node # optional: if you want this NAS to be an exit node
             # - TS_HOSTNAME = nicagi-store01 # sets the hostname in the Tailscale admin console
             - TS_STATE_DIR=/var/lib/tailscale # ensures state is written to the mounted volume
-            # - TS_SERVE_CONFIG=/config/serve-config.json # warning: first find the proxy url with `docker exec -it tailscale tailscale serve status`
+            - TS_SERVE_CONFIG=/config/serve-config.json # warning: first find the proxy url with `docker exec -it tailscale tailscale serve status`
             - TS_USERSPACE=false # using kernel mode, set to "true" for userspace mode if kernel mode fails.
         volumes:
+            - ${PWD}/ts-config:/config # stores tailscale's config for https connections
             - ${PWD}/ts-state:/var/lib/tailscale # stores tailscale's state, to persist it across container restarts/recreations.
         # network_mode: host
         devices:
@@ -46,8 +47,9 @@ services:
             DB_DATABASE_NAME: immich
             TZ: Europe/Rome
         network_mode: service:tailscale
-        ports:
-          - '2283:2283' # optional: if you want to expose the port to the internet
+        # using tailnet instead of port forwarding
+        # ports:
+        #   - '2283:2283'
         depends_on:
             - redis
             - database
