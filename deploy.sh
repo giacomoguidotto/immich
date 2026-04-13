@@ -20,12 +20,13 @@ trap cleanup EXIT
 # ─────────────────────────────────────────────────────────────────
 
 usage() {
-    echo "Usage: $0 [--sync-only | --restart-only | --setup]"
+    echo "Usage: $0 [--sync-only | --restart-only | --setup | --rotate-key <key>]"
     echo ""
-    echo "  (no flags)      Sync files and restart services"
-    echo "  --sync-only     Only sync files, don't restart"
-    echo "  --restart-only  Only pull images and restart, don't sync"
-    echo "  --setup         One-time NAS setup (home dir + SSH key)"
+    echo "  (no flags)              Sync files and restart services"
+    echo "  --sync-only             Only sync files, don't restart"
+    echo "  --restart-only          Only pull images and restart, don't sync"
+    echo "  --setup                 One-time NAS setup (home dir + SSH key)"
+    echo "  --rotate-key <key>      Update TS_AUTHKEY on the NAS and restart tailscale"
     echo ""
     echo "Environment variables:"
     echo "  NAS_HOST   NAS hostname or IP (default: nicagi-store01)"
@@ -36,6 +37,7 @@ usage() {
 SYNC=true
 RESTART=true
 SETUP=false
+ROTATE_KEY=""
 
 while [[ $# -gt 0 ]]; do
     case $1 in
@@ -53,6 +55,17 @@ while [[ $# -gt 0 ]]; do
             RESTART=false
             shift
             ;;
+        --rotate-key)
+            if [[ -z "${2:-}" ]]; then
+                echo "ERROR: --rotate-key requires a key argument"
+                echo "  Generate one at: https://login.tailscale.com/admin/settings/keys"
+                exit 1
+            fi
+            ROTATE_KEY="$2"
+            SYNC=false
+            RESTART=false
+            shift 2
+            ;;
         -h|--help)
             usage
             exit 0
@@ -69,37 +82,51 @@ if [ "$SETUP" = true ]; then
     echo "Running one-time NAS setup..."
 
     NAS_HOME="/share/homes/${NAS_USER}"
-
-    echo "Creating home directory and .ssh directory on NAS..."
-    ssh ${SSH_OPTS} "${NAS_USER}@${NAS_HOST}" "\
-        mkdir -p ${NAS_HOME}/.ssh && \
-        chmod 755 ${NAS_HOME} && \
-        chmod 700 ${NAS_HOME}/.ssh"
-
-    echo "Copying SSH public key to NAS..."
-    # find the public key configured for this host (falls back to life-auth.pub)
     PUBKEY_FILE="${HOME}/.ssh/life-auth.pub"
+
     if [ ! -f "$PUBKEY_FILE" ]; then
         echo "ERROR: Public key not found at ${PUBKEY_FILE}"
         exit 1
     fi
 
-    PUBKEY=$(cat "$PUBKEY_FILE")
-    ssh ${SSH_OPTS} "${NAS_USER}@${NAS_HOST}" "\
-        grep -qF '${PUBKEY}' ${NAS_HOME}/.ssh/authorized_keys 2>/dev/null || \
-        echo '${PUBKEY}' >> ${NAS_HOME}/.ssh/authorized_keys && \
+    echo "Creating home directory, .ssh directory, and copying public key to NAS..."
+    echo "(you will be prompted for the NAS password one last time)"
+    cat "$PUBKEY_FILE" | ssh "${NAS_USER}@${NAS_HOST}" "\
+        mkdir -p ${NAS_HOME}/.ssh && \
+        chmod 755 ${NAS_HOME} && \
+        chmod 700 ${NAS_HOME}/.ssh && \
+        cat >> ${NAS_HOME}/.ssh/authorized_keys && \
         chmod 600 ${NAS_HOME}/.ssh/authorized_keys"
 
     echo "Setup complete. Testing key-based auth..."
-    # close the multiplexed connection so the next one tests fresh auth
-    ssh -o ControlPath="${CTRL_SOCKET}" -O exit "${NAS_USER}@${NAS_HOST}" 2>/dev/null || true
-
     if ssh -o BatchMode=yes "${NAS_USER}@${NAS_HOST}" "echo 'SSH key auth works!'" 2>/dev/null; then
         echo "Key-based authentication is working. No more password prompts."
     else
         echo "WARNING: Key auth test failed. 1Password may need to approve the key."
         echo "Try running: ssh nicagi-store01"
     fi
+    exit 0
+fi
+
+if [ -n "$ROTATE_KEY" ]; then
+    # validate key format
+    if [[ ! "$ROTATE_KEY" =~ ^tskey-auth- ]]; then
+        echo "WARNING: Key doesn't start with 'tskey-auth-'. Are you sure this is correct?"
+        read -r -p "Continue? [y/N] " confirm
+        [[ "$confirm" =~ ^[Yy]$ ]] || exit 1
+    fi
+
+    echo "Updating TS_AUTHKEY on NAS..."
+    ssh ${SSH_OPTS} "${NAS_USER}@${NAS_HOST}" "bash -l -c '
+        cd ${NAS_PATH} && \
+        sed -i \"s|^TS_AUTHKEY=.*|TS_AUTHKEY=${ROTATE_KEY}|\" .env && \
+        echo \"Key updated in .env\" && \
+        docker compose up -d --force-recreate tailscale && \
+        echo \"Tailscale container recreated\" && \
+        sleep 5 && \
+        docker exec tailscale tailscale status
+    '"
+    echo "Done. Tailscale auth key rotated."
     exit 0
 fi
 
