@@ -132,14 +132,25 @@ fi
 
 if [ "$SYNC" = true ]; then
     echo "Syncing config to ${NAS_USER}@${NAS_HOST}:${NAS_PATH}..."
+
+    RSYNC_EXCLUDES=(
+        --exclude='.git/'
+        --exclude='.gitignore'
+        --exclude='.env.example'
+        --exclude='deploy.sh'
+        --exclude='ts-state/'
+        --exclude='README.md'
+    )
+
+    # sync .env only if it exists locally (e.g. first-time setup)
+    if [ -f "${SCRIPT_DIR}/.env" ]; then
+        echo "Local .env found — syncing it to NAS."
+    else
+        RSYNC_EXCLUDES+=(--exclude='.env')
+    fi
+
     rsync -avz -e "ssh ${SSH_OPTS}" \
-        --exclude='.git/' \
-        --exclude='.gitignore' \
-        --exclude='.env' \
-        --exclude='.env.example' \
-        --exclude='deploy.sh' \
-        --exclude='ts-state/' \
-        --exclude='README.md' \
+        "${RSYNC_EXCLUDES[@]}" \
         "${SCRIPT_DIR}/" "${NAS_USER}@${NAS_HOST}:${NAS_PATH}/"
     echo "Files synced."
 fi

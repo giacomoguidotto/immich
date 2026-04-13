@@ -32,17 +32,23 @@ Immich is exposed at `https://immich.astrapia-mamba.ts.net` via Tailscale Serve 
 ## Quick start
 
 ```bash
-# one-time: set up SSH key auth to the NAS
+# 1. create your .env from the template
+cp .env.example .env
+# ... fill in your values ...
+
+# 2. one-time: set up SSH key auth to the NAS
 ./deploy.sh --setup
 
-# deploy config and restart services
+# 3. deploy everything (including .env on first run)
 ./deploy.sh
+```
 
-# sync files only (no restart)
-./deploy.sh --sync-only
+> If a local `.env` is present, `deploy.sh` syncs it to the NAS. If not, the NAS `.env` is left untouched — so day-to-day deploys never overwrite your secrets.
 
-# pull latest images and restart (no file sync)
-./deploy.sh --restart-only
+```bash
+# other commands
+./deploy.sh --sync-only       # sync files only, don't restart
+./deploy.sh --restart-only    # pull images and restart, no file sync
 ```
 
 ## Tailscale key rotation
