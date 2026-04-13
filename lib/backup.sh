@@ -129,7 +129,7 @@ else
 fi
 
 echo "$(log_prefix) Immich backup process finished successfully."
-echo "$(log_prefix) Backups are located in: ${BACKUP_BASE_DIR}"
+echo "$(log_prefix) Backups are located in: ${X_BACKUP_VOLUME}${X_BACKUP_LOCATION}"
 
 unset DB_PASSWORD
 set +e

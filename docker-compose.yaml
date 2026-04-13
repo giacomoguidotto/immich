@@ -1,14 +1,33 @@
 # immich compose file
-# 2025-07-31 v0.3
+# 2026-04-13 v0.4
 #
 # useful links:
 # - immich installation guide: https://immich.app/docs/install/docker-compose
 # - immich docker-compose file: https://github.com/immich-app/immich/releases/latest/download/docker-compose.yml
 # - tailscale docker-compose file: https://github.com/tailscale-dev/docker-guide-code-examples/blob/main/01-authkey/compose.yaml
+# - watchtower documentation: https://containrrr.dev/watchtower/
 
 name: immich
 
 services:
+    watchtower:
+        image: containrrr/watchtower:latest
+        container_name: watchtower
+        volumes:
+            - /var/run/docker.sock:/var/run/docker.sock
+        environment:
+            # only update containers with the watchtower enable label
+            - WATCHTOWER_LABEL_ENABLE=true
+            # remove old images after updating
+            - WATCHTOWER_CLEANUP=true
+            # check for updates daily at 4:00 AM
+            - WATCHTOWER_SCHEDULE=0 0 4 * * *
+            # optional: enable notifications (uncomment and configure)
+            # - WATCHTOWER_NOTIFICATIONS=email
+            # - WATCHTOWER_NOTIFICATION_EMAIL_FROM=...
+            # - WATCHTOWER_NOTIFICATION_EMAIL_TO=...
+        restart: unless-stopped
+
     tailscale:
         image: tailscale/tailscale:latest
         container_name: tailscale
@@ -16,29 +35,32 @@ services:
         environment:
             # generated key from tailscale dashboard, avoid login procedure
             - TS_AUTHKEY=${TS_AUTHKEY}
-            # optional: if you want this NAS to be an exit node
-            # - TS_EXTRA_ARGS=--advertise-tags=tag:container --reset --advertise-exit-node
             # ensures state is persisted to the mounted volume
             - TS_STATE_DIR=/var/lib/tailscale
             # note: find the domain exposed from ts serve with
             # `docker exec -it tailscale tailscale serve status`
             - TS_SERVE_CONFIG=/config/serve-config.json
-             # using kernel mode, set to "true" for userspace mode if kernel mode fails.
-            - TS_USERSPACE=false
+            # userspace mode for QNAP kernel compatibility (avoids /dev/net/tun issues)
+            - TS_USERSPACE=true
+            # optional: if you want this NAS to be an exit node
+            # - TS_EXTRA_ARGS=--advertise-tags=tag:container --reset --advertise-exit-node
         volumes:
             # stores tailscale's config for https connections
-            - ${PWD}/ts-config:/config 
-            # stores tailscale's state, to persist it across container restarts/recreations.
-            - ${PWD}/ts-state:/var/lib/tailscale 
-        devices:
-            # required for TUN device
-            - /dev/net/tun:/dev/net/tun 
+            - ./ts-config:/config
+            # stores tailscale's state, to persist it across container restarts/recreations
+            - ./ts-state:/var/lib/tailscale
         cap_add:
             # required for ts to modify network interfaces
-            - net_admin 
-            # required for ts to modify kernel modules
-            # - sys_module 
+            - net_admin
+        healthcheck:
+            test: ["CMD", "tailscale", "status"]
+            interval: 1m
+            timeout: 10s
+            retries: 3
+            start_period: 30s
         restart: unless-stopped
+        labels:
+            - "com.centurylinklabs.watchtower.enable=true"
 
     immich-server:
         container_name: immich_server
@@ -53,17 +75,26 @@ services:
         env_file:
             - .env
 
-        # using tailnet instead of port forwarding
+        # -- network mode -------------------------------------------------
+        # option A: expose via tailscale (default)
+        network_mode: service:tailscale
+        # option B: expose via direct port mapping (uncomment below, comment option A)
         # ports:
         #   - '2283:2283'
-        network_mode: service:tailscale
+        # ------------------------------------------------------------------
 
         depends_on:
-            - redis
-            - database
+            tailscale:
+                condition: service_healthy
+            redis:
+                condition: service_started
+            database:
+                condition: service_started
         restart: always
         healthcheck:
             disable: false
+        labels:
+            - "com.centurylinklabs.watchtower.enable=true"
 
     immich-machine-learning:
         container_name: immich_machine_learning
@@ -80,6 +111,8 @@ services:
         restart: always
         healthcheck:
             disable: false
+        labels:
+            - "com.centurylinklabs.watchtower.enable=true"
 
     redis:
         container_name: immich_redis
