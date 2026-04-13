@@ -1,12 +1,12 @@
 # Immich
 
-Docker Compose configuration for [Immich](https://immich.app) running on a QNAP NAS, accessed remotely via [Tailscale](https://tailscale.com).
+Docker Compose configuration for [Immich](https://immich.app) running on a QNAP NAS, accessed remotely via [Tailscale](https://tailscale.com) and [Cloudflare Tunnel](https://developers.cloudflare.com/cloudflare-one/networks/connectors/cloudflare-tunnel/).
 
 ## 📁 Files
 
 | File                          | Description                                                          |
 | ----------------------------- | -------------------------------------------------------------------- |
-| `docker-compose.yaml`         | All services: Immich, Tailscale, Watchtower, Postgres, Redis         |
+| `docker-compose.yaml`         | All services: Immich, Tailscale, Cloudflared, Watchtower, Postgres, Redis |
 | `.env.example`                | Template for `.env`                                                  |
 | `ts-config/serve-config.json` | Tailscale Serve config - HTTPS proxy to Immich                       |
 | `lib/immich-config.json`      | Immich application settings                                          |
@@ -56,8 +56,15 @@ Auth keys expire every 90 days. Generate a new one at [Tailscale admin](https://
 - `tailscale` (`:latest`)
 - `immich-server` (`:release`)
 - `immich-machine-learning` (`:release`)
+- `cloudflared` (`:latest`)
 
 Postgres and Redis are **not** auto-updated (pinned versions to avoid data migration issues).
+
+## 🌐 Custom domain
+
+Immich is accessible via a custom domain through a [Cloudflare Tunnel](https://developers.cloudflare.com/cloudflare-one/networks/connectors/cloudflare-tunnel/). The `cloudflared` container connects outbound to Cloudflare's edge, no inbound ports needed.
+
+To set up, create a tunnel in [Zero Trust](https://one.dash.cloudflare.com/) > Networks > Connectors > Cloudflare Tunnels, then add `CF_TUNNEL_TOKEN` to your `.env`.
 
 ## 💾 Backups
 

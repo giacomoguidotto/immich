@@ -62,6 +62,18 @@ services:
         labels:
             - "com.centurylinklabs.watchtower.enable=true"
 
+    cloudflared:
+        image: cloudflare/cloudflared:latest
+        container_name: cloudflared
+        command: tunnel run --token ${CF_TUNNEL_TOKEN}
+        network_mode: service:tailscale
+        depends_on:
+            tailscale:
+                condition: service_healthy
+        restart: unless-stopped
+        labels:
+            - "com.centurylinklabs.watchtower.enable=true"
+
     immich-server:
         container_name: immich_server
         image: ghcr.io/immich-app/immich-server:${IMMICH_VERSION:-release}
