@@ -20,13 +20,14 @@ trap cleanup EXIT
 # ─────────────────────────────────────────────────────────────────
 
 usage() {
-    echo "Usage: $0 [--sync-only | --restart-only | --setup | --rotate-key <key>]"
+    echo "Usage: $0 [--sync-only | --restart-only | --setup | --rotate-key <key> | --backup [--skip-dump]]"
     echo ""
     echo "  (no flags)              Sync files and restart services"
     echo "  --sync-only             Only sync files, don't restart"
     echo "  --restart-only          Only pull images and restart, don't sync"
     echo "  --setup                 One-time NAS setup (home dir + SSH key)"
     echo "  --rotate-key <key>      Update TS_AUTHKEY on the NAS and restart tailscale"
+    echo "  --backup [--skip-dump]  Run backup to external drive (optionally skip DB dump)"
     echo ""
     echo "Environment variables:"
     echo "  NAS_HOST   NAS hostname or IP (default: nicagi-store01)"
@@ -38,6 +39,8 @@ SYNC=true
 RESTART=true
 SETUP=false
 ROTATE_KEY=""
+BACKUP=false
+BACKUP_ARGS=""
 
 while [[ $# -gt 0 ]]; do
     case $1 in
@@ -65,6 +68,16 @@ while [[ $# -gt 0 ]]; do
             SYNC=false
             RESTART=false
             shift 2
+            ;;
+        --backup)
+            BACKUP=true
+            SYNC=false
+            RESTART=false
+            shift
+            ;;
+        --skip-dump)
+            BACKUP_ARGS="--skip-dump"
+            shift
             ;;
         -h|--help)
             usage
@@ -127,6 +140,14 @@ if [ -n "$ROTATE_KEY" ]; then
         docker exec tailscale tailscale status
     '"
     echo "Done. Tailscale auth key rotated."
+    exit 0
+fi
+
+if [ "$BACKUP" = true ]; then
+    echo "Running backup on NAS..."
+    # -t allocates a TTY so the backup script can prompt for drive selection
+    ssh -t ${SSH_OPTS} "${NAS_USER}@${NAS_HOST}" "bash -l -c 'cd ${NAS_PATH}/lib && bash backup.sh ${BACKUP_ARGS}'"
+    echo "Backup complete."
     exit 0
 fi
 

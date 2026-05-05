@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # immich backup script
-# 2025-07-31 v1.3
+# 2026-05-05 v2.0
 
 log_prefix() { echo "[$(date '+%Y%m%d %H:%M:%S.%3N')] -"; }
 
@@ -12,18 +12,13 @@ if [ ! -f "$ENV_FILE" ]; then
     exit 1
 fi
 
-set -a  # automatically export all variables
+set -a
 source "$ENV_FILE"
-set +a  # turn off automatic export
+set +a
 
 # check env variables
 if [ -z "${UPLOAD_LOCATION:-}" ]; then
     echo "$(log_prefix) ERROR: UPLOAD_LOCATION not found in .env file"
-    exit 1
-fi
-
-if [ -z "${X_BACKUP_VOLUME:-}" ]; then
-    echo "$(log_prefix) ERROR: X_BACKUP_VOLUME not found in .env file"
     exit 1
 fi
 
@@ -73,14 +68,51 @@ set -u
 # exit if any command in a pipeline fails
 set -o pipefail
 
-# check if external drive is mounted
-echo "$(log_prefix) Checking if external drive is mounted at ${X_BACKUP_VOLUME}..."
-if ! grep -qs "${X_BACKUP_VOLUME} " /proc/mounts; then
-    echo "$(log_prefix) ERROR: External drive ${X_BACKUP_VOLUME} does not appear to be mounted."
+# detect external drives
+EXTERNAL_BASE="/share/external"
+echo "$(log_prefix) Detecting external drives at ${EXTERNAL_BASE}..."
+
+DRIVES=()
+if [ -d "$EXTERNAL_BASE" ]; then
+    for d in "$EXTERNAL_BASE"/*/; do
+        [ -d "$d" ] && DRIVES+=("${d%/}")
+    done
+fi
+
+if [ ${#DRIVES[@]} -eq 0 ]; then
+    echo "$(log_prefix) ERROR: No external drives found at ${EXTERNAL_BASE}."
     echo "$(log_prefix) Please connect and mount the drive, then re-run the script."
     exit 1
+elif [ ${#DRIVES[@]} -eq 1 ]; then
+    X_BACKUP_VOLUME="${DRIVES[0]}"
+    echo "$(log_prefix) Found external drive: ${X_BACKUP_VOLUME}"
+else
+    echo "$(log_prefix) Multiple external drives found:"
+    for i in "${!DRIVES[@]}"; do
+        echo "  $((i+1))) ${DRIVES[$i]}"
+    done
+    read -r -p "Select drive [1-${#DRIVES[@]}]: " choice
+    if ! [[ "$choice" =~ ^[0-9]+$ ]] || [ "$choice" -lt 1 ] || [ "$choice" -gt ${#DRIVES[@]} ]; then
+        echo "$(log_prefix) ERROR: Invalid selection."
+        exit 1
+    fi
+    X_BACKUP_VOLUME="${DRIVES[$((choice-1))]}"
+    echo "$(log_prefix) Selected: ${X_BACKUP_VOLUME}"
 fi
-echo "$(log_prefix) External drive found."
+
+# show drive info and ask for confirmation
+echo ""
+echo "── Drive details ──────────────────────────────────────"
+echo "  Path:       ${X_BACKUP_VOLUME}"
+df -h "${X_BACKUP_VOLUME}" 2>/dev/null | awk 'NR==2 { printf "  Size:       %s\n  Used:       %s (%s)\n  Available:  %s\n", $2, $3, $5, $4 }'
+echo "  Backup dir: ${X_BACKUP_VOLUME}${X_BACKUP_LOCATION}"
+echo "──────────────────────────────────────────────────────"
+echo ""
+read -r -p "Proceed with backup to this drive? [y/N] " confirm
+if [[ ! "$confirm" =~ ^[Yy]$ ]]; then
+    echo "$(log_prefix) Backup cancelled."
+    exit 0
+fi
 
 # create backup directories if they don't exist
 DB_BACKUP_DIR="${X_BACKUP_VOLUME}${X_BACKUP_LOCATION}/db_backups"
