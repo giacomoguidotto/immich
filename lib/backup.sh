@@ -163,6 +163,19 @@ fi
 echo "$(log_prefix) Immich backup process finished successfully."
 echo "$(log_prefix) Backups are located in: ${X_BACKUP_VOLUME}${X_BACKUP_LOCATION}"
 
+# offer to eject the external drive
+echo ""
+read -r -p "Eject ${X_BACKUP_VOLUME}? [Y/n] " eject
+if [[ ! "$eject" =~ ^[Nn]$ ]]; then
+    echo "$(log_prefix) Syncing and unmounting ${X_BACKUP_VOLUME}..."
+    sync
+    if umount "${X_BACKUP_VOLUME}"; then
+        echo "$(log_prefix) Drive ejected. Safe to disconnect."
+    else
+        echo "$(log_prefix) WARNING: Failed to unmount. The drive may still be in use."
+    fi
+fi
+
 unset DB_PASSWORD
 set +e
 set +u
