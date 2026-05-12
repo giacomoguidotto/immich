@@ -25,7 +25,7 @@ usage() {
     echo "  (no flags)              Sync files and restart services"
     echo "  --sync-only             Only sync files, don't restart"
     echo "  --restart-only          Only pull images and restart, don't sync"
-    echo "  --setup                 One-time NAS setup (home dir + SSH key)"
+    echo "  --setup                 One-time NAS setup (SSH key + boot autorun)"
     echo "  --rotate-key <key>      Update TS_AUTHKEY on the NAS and restart tailscale"
     echo "  --backup [--skip-dump]  Run backup to external drive (optionally skip DB dump)"
     echo ""
@@ -95,6 +95,7 @@ if [ "$SETUP" = true ]; then
     echo "Running one-time NAS setup..."
 
     NAS_HOME="/share/homes/${NAS_USER}"
+    PERSISTENT_SSH="${NAS_PATH}/.ssh"
     PUBKEY_FILE="${HOME}/.ssh/life-auth.pub"
 
     if [ ! -f "$PUBKEY_FILE" ]; then
@@ -102,18 +103,28 @@ if [ "$SETUP" = true ]; then
         exit 1
     fi
 
-    echo "Creating home directory, .ssh directory, and copying public key to NAS..."
-    echo "(you will be prompted for the NAS password one last time)"
-    cat "$PUBKEY_FILE" | ssh "${NAS_USER}@${NAS_HOST}" "\
-        mkdir -p ${NAS_HOME}/.ssh && \
-        chmod 755 ${NAS_HOME} && \
-        chmod 700 ${NAS_HOME}/.ssh && \
-        cat >> ${NAS_HOME}/.ssh/authorized_keys && \
-        chmod 600 ${NAS_HOME}/.ssh/authorized_keys"
+    PUBKEY=$(cat "$PUBKEY_FILE")
 
-    echo "Setup complete. Testing key-based auth..."
+    echo "Setting up SSH keys and boot autorun..."
+    echo "(you will be prompted for the NAS password, then the sudo password)"
+    ssh -t "${NAS_USER}@${NAS_HOST}" "\
+        mkdir -p ${PERSISTENT_SSH} ${NAS_HOME}/.ssh && \
+        printf '%s\n' '${PUBKEY}' > ${PERSISTENT_SSH}/authorized_keys && \
+        cp ${PERSISTENT_SSH}/authorized_keys ${NAS_HOME}/.ssh/authorized_keys && \
+        chmod 755 ${NAS_HOME} && \
+        chmod 700 ${PERSISTENT_SSH} ${NAS_HOME}/.ssh && \
+        chmod 600 ${PERSISTENT_SSH}/authorized_keys ${NAS_HOME}/.ssh/authorized_keys && \
+        (chmod +x ${NAS_PATH}/lib/boot-init.sh 2>/dev/null || true) && \
+        (sudo grep -qF boot-init.sh /tmp/config/autorun.sh 2>/dev/null || \
+            echo '[ -x ${NAS_PATH}/lib/boot-init.sh ] && ${NAS_PATH}/lib/boot-init.sh &' | sudo tee -a /tmp/config/autorun.sh > /dev/null) && \
+        echo 'Setup complete.'"
+
+    echo "Testing key-based auth..."
     if ssh -o BatchMode=yes "${NAS_USER}@${NAS_HOST}" "echo 'SSH key auth works!'" 2>/dev/null; then
-        echo "Key-based authentication is working. No more password prompts."
+        echo "Key-based authentication is working."
+        echo "SSH keys stored persistently — they survive NAS reboots."
+        echo ""
+        echo "Next: run ./deploy.sh to sync boot-init.sh to the NAS."
     else
         echo "WARNING: Key auth test failed. 1Password may need to approve the key."
         echo "Try running: ssh nicagi-store01"
@@ -159,6 +170,7 @@ if [ "$SYNC" = true ]; then
         --exclude='.gitignore'
         --exclude='.env.example'
         --exclude='deploy.sh'
+        --exclude='Dockerfile.caddy'
         --exclude='ts-state/'
         --exclude='README.md'
     )
