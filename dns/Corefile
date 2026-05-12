@@ -1,0 +1,6 @@
+guidotto.dev:53 {
+    hosts /etc/coredns/hosts {
+        fallthrough
+    }
+    forward . 1.1.1.1 1.0.0.1
+}
