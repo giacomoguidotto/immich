@@ -6,7 +6,7 @@ Personal homelab infrastructure-as-code. See `CONTEXT.md` for domain language an
 
 ### Issue tracker
 
-GitHub Issues on `giacomoguidotto/immich`. See `docs/agents/issue-tracker.md`.
+GitHub Issues on `giacomoguidotto/infra`. See `docs/agents/issue-tracker.md`.
 
 ### Triage labels
 

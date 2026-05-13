@@ -11,6 +11,7 @@ Docker Compose configuration for [Immich](https://immich.app) running on a QNAP 
 | `ts-config/serve-config.json` | Tailscale Serve config - HTTPS proxy to Immich                       |
 | `lib/immich-config.json`      | Immich application settings                                          |
 | `lib/backup.sh`               | Backup script - dumps Postgres + rsyncs uploads to an external drive |
+| `lib/restore.sh`              | Restore script - restores Postgres dump + upload data, starts stack  |
 | `deploy.sh`                   | Deploys config to the NAS and manages services                       |
 
 ## 🚀 Quick start
@@ -70,10 +71,18 @@ To set up, create a tunnel in [Zero Trust](https://one.dash.cloudflare.com/) > N
 
 ```bash
 # full backup (database dump + upload rsync to external drive)
-ssh <nas-host> "bash -l -c 'cd /share/immich/config/lib && ./backup.sh'"
+./deploy.sh --backup
 
 # skip database dump, only sync uploads
-ssh <nas-host> "bash -l -c 'cd /share/immich/config/lib && ./backup.sh --skip-dump'"
+./deploy.sh --backup --skip-dump
 ```
 
-Requires an external drive mounted at `X_BACKUP_VOLUME` (configured in `.env`).
+Requires an external drive mounted at `/share/external/` on the NAS.
+
+## 🔄 Restore
+
+```bash
+./deploy.sh --restore
+```
+
+Interactively selects the external drive, locates the backup, and restores. Stops all services, rsyncs upload data back, starts Postgres, restores the database dump, then brings up the full stack.
