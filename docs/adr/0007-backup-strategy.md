@@ -1,0 +1,3 @@
+# 3-2-1 backup with BorgBackup and Hetzner Storage Box
+
+Backups follow a 3-2-1 strategy: RAID 1 SSDs (live, on-site), external USB HDD (monthly manual rsync, stored off-site), and Hetzner Storage Box BX11 (1 TB, €3.49/mo, daily automated BorgBackup). BorgBackup handles deduplication and compression, keeping incremental daily backups small after the initial seed. A systemd timer managed by Ansible runs daily: pg_dump (compressed), then BorgBackup to Hetzner over SSH. The external USB drive remains a manual monthly sync for a physically independent off-site copy. Backblaze B2 was considered but Hetzner's native BorgBackup support and flat 1 TB pricing is simpler for ~710 GB of data.
