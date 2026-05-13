@@ -127,11 +127,11 @@ echo "$(log_prefix) Backup directories checked/created."
 DB_CONTAINER_NAME="immich_postgres"
 
 if [ "$SKIP_DUMP" = false ]; then
-    DB_BACKUP_FILE="${DB_BACKUP_DIR}/immich-db-$(date '+%Y%m%d%H%M%S').sql.gz"
+    DB_BACKUP_FILE="${DB_BACKUP_DIR}/immich-db-latest.sql.gz"
     echo "$(log_prefix) Starting database backup for container '${DB_CONTAINER_NAME}'..."
     echo "$(log_prefix) Dumping to ${DB_BACKUP_FILE}..."
 
-    if PGPASSWORD="${DB_PASSWORD}" docker exec -t "${DB_CONTAINER_NAME}" pg_dumpall --clean --if-exists --username="${DB_USERNAME}" | gzip > "${DB_BACKUP_FILE}"; then
+    if docker exec -t "${DB_CONTAINER_NAME}" pg_dumpall --clean --if-exists --username="${DB_USERNAME}" | gzip > "${DB_BACKUP_FILE}"; then
         echo "$(log_prefix) Database backup completed successfully."
     else
         echo "$(log_prefix) ERROR: Database backup failed."

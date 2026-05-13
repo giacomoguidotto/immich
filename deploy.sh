@@ -28,6 +28,7 @@ usage() {
     echo "  --setup                 One-time NAS setup (SSH key + boot autorun)"
     echo "  --rotate-key <key>      Update TS_AUTHKEY on the NAS and restart tailscale"
     echo "  --backup [--skip-dump]  Run backup to external drive (optionally skip DB dump)"
+    echo "  --restore               Restore from backup on an external drive"
     echo ""
     echo "Environment variables:"
     echo "  NAS_HOST   NAS hostname or IP (default: nicagi-store01)"
@@ -41,6 +42,7 @@ SETUP=false
 ROTATE_KEY=""
 BACKUP=false
 BACKUP_ARGS=""
+RESTORE=false
 
 while [[ $# -gt 0 ]]; do
     case $1 in
@@ -77,6 +79,12 @@ while [[ $# -gt 0 ]]; do
             ;;
         --skip-dump)
             BACKUP_ARGS="--skip-dump"
+            shift
+            ;;
+        --restore)
+            RESTORE=true
+            SYNC=false
+            RESTART=false
             shift
             ;;
         -h|--help)
@@ -151,6 +159,13 @@ if [ -n "$ROTATE_KEY" ]; then
         docker exec tailscale tailscale status
     '"
     echo "Done. Tailscale auth key rotated."
+    exit 0
+fi
+
+if [ "$RESTORE" = true ]; then
+    echo "Running restore on NAS..."
+    ssh -t ${SSH_OPTS} "${NAS_USER}@${NAS_HOST}" "bash -l -c 'cd ${NAS_PATH}/lib && bash restore.sh'"
+    echo "Restore complete."
     exit 0
 fi
 
