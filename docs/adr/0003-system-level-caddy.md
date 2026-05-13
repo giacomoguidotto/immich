@@ -1,0 +1,3 @@
+# System-level Caddy, not containerized
+
+Caddy runs as a system-level service (apt + xcaddy for the Cloudflare plugin), managed by Ansible, not as a Docker container. Each service's Ansible role drops a site config into `/etc/caddy/sites/` and reloads Caddy. This keeps the reverse proxy alive even when all containers are down (critical for a status page), avoids Docker cross-network complexity as services grow, and treats the reverse proxy as infrastructure rather than a service. The alternative -- Caddy as a container with shared Docker networks -- was rejected because it couples the front door to the container runtime and makes multi-compose-stack networking unnecessarily complex.
